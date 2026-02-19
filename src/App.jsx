@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import { getDeviceId, generatePairingCode } from './lib/device';
+import { cacheManager } from './services/cacheManager';
 import PairingView from './views/PairingView';
 import PlayerView from './views/PlayerView';
 
@@ -141,17 +142,59 @@ export default function App() {
     }
   };
 
-  const fetchPlaylist = async (playlistId) => {
-    const { data, error } = await supabase
-      .from('playlists')
-      .select('*')
-      .eq('id', playlistId)
-      .single();
 
-    if (data) {
-      setPlaylist(data);
+
+  const fetchPlaylist = async (playlistId) => {
+    setIsSyncing(true);
+    try {
+      const { data, error } = await supabase
+        .from('playlists')
+        .select('*')
+        .eq('id', playlistId)
+        .single();
+
+      if (data) {
+        // Cache the content before setting it
+        const cachedPlaylist = await cacheManager.cachePlaylist(data);
+
+        // Revoke old URLs if switching playlists
+        if (playlist) {
+          cacheManager.revokeUrls(playlist);
+        }
+
+        setPlaylist(cachedPlaylist);
+
+        // Cleanup unused cache
+        cacheManager.cleanupCache(cachedPlaylist);
+      }
+    } catch (e) {
+      console.error("Fetch/Cache Error:", e);
+    } finally {
+      setIsSyncing(false);
     }
   }
+
+  // Subscribe to Playlist Updates
+  useEffect(() => {
+    if (!playlist?.id) return;
+
+    const channel = supabase
+      .channel(`playlist:${playlist.id}`)
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'playlists', filter: `id=eq.${playlist.id}` },
+        (payload) => {
+          console.log('[Realtime] Playlist updated:', payload);
+          // Re-fetch and re-sync
+          fetchPlaylist(playlist.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    }
+  }, [playlist?.id]);
+
 
   if (status === 'loading') {
     return (
@@ -167,5 +210,15 @@ export default function App() {
     return <PairingView code={pairingCode} />;
   }
 
-  return <PlayerView screenId={screenData?.id} initialPlaylist={playlist} />;
+  return (
+    <>
+      <PlayerView screenId={screenData?.id} initialPlaylist={playlist} />
+      {isSyncing && (
+        <div className="fixed top-4 right-4 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-2 z-50 animate-pulse">
+          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" />
+          <span className="text-xs text-white/80 font-mono">SYNCING</span>
+        </div>
+      )}
+    </>
+  );
 }

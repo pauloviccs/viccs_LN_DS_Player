@@ -3,10 +3,10 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 // Helper to resolve media URLs
 const getMediaSrc = (item) => {
     if (!item) return '';
-    // Web Version: Direct URL from Supabase Storage
-    if (item.url) return item.url;
 
-    // Fallback/Legacy
+    // Priority: Cached Blob URL -> Network URL -> Legacy Source
+    if (item.src && item.src.startsWith('blob:')) return item.src;
+    if (item.url) return item.url;
     return item.src || '';
 };
 
