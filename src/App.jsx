@@ -377,17 +377,6 @@ export default function App() {
     };
   }, [playlist?.id, playlist?.updated_at]);
 
-
-  if (status === 'loading') {
-    return (
-      <div className="bg-black text-white h-screen flex flex-col items-center justify-center gap-4">
-        <div className="text-2xl font-bold">Lumia Player Setup</div>
-        <div className="animate-pulse text-sm text-gray-400">Iniciando Sistema...</div>
-        {debugError && <div className="text-red-500 text-xs mt-4">{debugError}</div>}
-      </div>
-    );
-  }
-
   // Fail-safe: refresh pairing code every minute while on pairing screen
   useEffect(() => {
     if (status !== 'pairing') return;
@@ -417,6 +406,17 @@ export default function App() {
 
     return () => clearInterval(intervalId);
   }, [status, screenData?.name]);
+
+  // All hooks must be declared before any conditional returns
+  if (status === 'loading') {
+    return (
+      <div className="bg-black text-white h-screen flex flex-col items-center justify-center gap-4">
+        <div className="text-2xl font-bold">Lumia Player Setup</div>
+        <div className="animate-pulse text-sm text-gray-400">Iniciando Sistema...</div>
+        {debugError && <div className="text-red-500 text-xs mt-4">{debugError}</div>}
+      </div>
+    );
+  }
 
   if (status === 'pairing') {
     return <PairingView code={pairingCode} />;
