@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 import { getDeviceId, generatePairingCode } from './lib/device';
 import { cacheManager } from './services/cacheManager';
@@ -13,6 +13,11 @@ export default function App() {
   const [debugError, setDebugError] = useState(null);
   const [schemaError, setSchemaError] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Keep references for proper cleanup and comparison
+  const screenChannelRef = useRef(null);
+  const pingIntervalRef = useRef(null);
+  const previousScreenRef = useRef(null);
 
   if (!supabase) {
     return (
@@ -91,28 +96,34 @@ export default function App() {
 
         handleScreenState(screen);
 
-        // 2. Subscribe to Realtime Updates
-        supabase
+        // 2. Subscribe to Realtime Updates for this screen
+        if (screenChannelRef.current) {
+          supabase.removeChannel(screenChannelRef.current);
+        }
+
+        screenChannelRef.current = supabase
           .channel('screen_updates')
           .on(
             'postgres_changes',
             { event: 'UPDATE', schema: 'public', table: 'screens', filter: `id=eq.${deviceId}` },
             (payload) => {
-              console.log('Realtime update:', payload);
+              console.log('[Realtime] Screen updated:', payload);
               handleScreenState(payload.new);
             }
           )
           .subscribe();
 
         // 3. Periodic Ping (Heartbeat)
-        const pingInterval = setInterval(async () => {
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+        }
+
+        pingIntervalRef.current = setInterval(async () => {
           await supabase
             .from('screens')
             .update({ last_ping: new Date() })
             .eq('id', deviceId);
         }, 30000); // 30s ping
-
-        return () => clearInterval(pingInterval);
 
       } catch (e) {
         console.error("Init Error:", e);
@@ -121,19 +132,43 @@ export default function App() {
     };
 
     initializePlayer();
+
+    // Cleanup on unmount
+    return () => {
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+      }
+      if (screenChannelRef.current) {
+        supabase.removeChannel(screenChannelRef.current);
+      }
+    }
   }, []);
 
   const handleScreenState = async (screen) => {
     console.log("Handling state:", screen);
+    const previousScreen = previousScreenRef.current;
+    previousScreenRef.current = screen;
+
+    const previousPlaylistId = previousScreen?.playlist_id || null;
+    const nextPlaylistId = screen?.playlist_id || null;
+
     setScreenData(screen);
 
     if (screen.status === 'online' || (screen.assigned_to && screen.pairing_code === null)) {
       // Online/Active
       setStatus('active');
       // Fetch Playlist if assigned
-      if (screen.playlist_id) {
-        fetchPlaylist(screen.playlist_id);
+      if (nextPlaylistId) {
+        // Only refetch if playlist changed or we don't have one yet
+        if (!previousPlaylistId || previousPlaylistId !== nextPlaylistId || !playlist) {
+          console.log('[Player] Playlist change detected:', previousPlaylistId, '->', nextPlaylistId);
+          fetchPlaylist(nextPlaylistId);
+        }
       } else {
+        // No playlist assigned anymore – clear current playlist and revoke URLs
+        if (playlist) {
+          cacheManager.revokeUrls(playlist);
+        }
         setPlaylist(null);
       }
     } else {
@@ -179,6 +214,8 @@ export default function App() {
   useEffect(() => {
     if (!playlist?.id) return;
 
+    console.log('[Player] Subscribing to playlist realtime channel for id:', playlist.id);
+
     const channel = supabase
       .channel(`playlist:${playlist.id}`)
       .on('postgres_changes',
@@ -192,9 +229,88 @@ export default function App() {
       .subscribe();
 
     return () => {
+      console.log('[Player] Removing playlist realtime channel for id:', playlist.id);
       supabase.removeChannel(channel);
     }
   }, [playlist?.id]);
+
+  // Fallback polling: periodically re-fetch screen state
+  useEffect(() => {
+    const deviceId = getDeviceId();
+    let isCancelled = false;
+
+    const pollScreen = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('screens')
+          .select('*')
+          .eq('id', deviceId)
+          .maybeSingle();
+
+        if (error) {
+          console.error('[Polling] Screen fetch error:', error);
+          return;
+        }
+
+        if (!isCancelled && data) {
+          console.log('[Polling] Screen state fetched:', data);
+          handleScreenState(data);
+        }
+      } catch (e) {
+        console.error('[Polling] Screen fetch exception:', e);
+      }
+    };
+
+    // Initial poll and interval
+    pollScreen();
+    const intervalId = setInterval(pollScreen, 60000); // 60s
+
+    return () => {
+      isCancelled = true;
+      clearInterval(intervalId);
+    };
+  }, []);
+
+  // Fallback polling: periodically re-fetch current playlist
+  useEffect(() => {
+    if (!playlist?.id) return;
+
+    let isCancelled = false;
+
+    const pollPlaylist = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('playlists')
+          .select('*')
+          .eq('id', playlist.id)
+          .single();
+
+        if (error) {
+          console.error('[Polling] Playlist fetch error:', error);
+          return;
+        }
+
+        if (isCancelled || !data) return;
+
+        // If updated_at changed, refetch and resync with cache pipeline
+        if (!playlist.updated_at || data.updated_at !== playlist.updated_at) {
+          console.log('[Polling] Playlist changed (updated_at), refetching:', playlist.id);
+          fetchPlaylist(playlist.id);
+        }
+      } catch (e) {
+        console.error('[Polling] Playlist fetch exception:', e);
+      }
+    };
+
+    // Initial poll and interval
+    pollPlaylist();
+    const intervalId = setInterval(pollPlaylist, 60000); // 60s
+
+    return () => {
+      isCancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [playlist?.id, playlist?.updated_at]);
 
 
   if (status === 'loading') {
