@@ -102,6 +102,7 @@ export default function PlayerView({ screenId, initialPlaylist }) {
 
             {activeItem?.type === 'video' ? (
                 <video
+                    key={src}
                     ref={videoRef}
                     src={src}
                     className="w-full h-full object-cover"
@@ -117,6 +118,7 @@ export default function PlayerView({ screenId, initialPlaylist }) {
                 />
             ) : (
                 <img
+                    key={src}
                     src={src}
                     className="w-full h-full object-cover"
                     alt="Content"

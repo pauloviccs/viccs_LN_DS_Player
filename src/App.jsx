@@ -129,8 +129,8 @@ export default function App() {
       // Online/Active
       setStatus('active');
       // Fetch Playlist if assigned
-      if (screen.current_playlist_id) {
-        fetchPlaylist(screen.current_playlist_id);
+      if (screen.playlist_id) {
+        fetchPlaylist(screen.playlist_id);
       } else {
         setPlaylist(null);
       }
