@@ -5,44 +5,58 @@ export const cacheManager = {
     /**
      * Downloads and caches all media items in a playlist.
      * @param {Object} playlist - The playlist object containing an 'items' array.
-     * @returns {Promise<Object>} - The playlist with updated item URLs (pointing to cache).
+     * @param {(completed: number, total: number) => void} [onProgress] - Optional progress callback.
+     * @returns {Promise<Object>} - The playlist with items pointing to cache-backed URLs.
      */
-    async cachePlaylist(playlist) {
+    async cachePlaylist(playlist, onProgress) {
         if (!playlist || !playlist.items) return playlist;
 
         console.log('[CacheManager] Starting sync for:', playlist.name);
         const cache = await caches.open(CACHE_NAME);
-        const updatedItems = await Promise.all(playlist.items.map(async (item) => {
+
+        const total = playlist.items.length;
+        let completed = 0;
+
+        if (onProgress) {
+            onProgress(0, total);
+        }
+
+        const updatedItems = [];
+
+        for (const item of playlist.items) {
             try {
                 // If it's already a blob URL or invalid, skip
-                if (!item.url || item.url.startsWith('blob:')) return item;
-
-                const request = new Request(item.url, { mode: 'cors' });
-                const matchingResponse = await cache.match(request);
-
-                if (!matchingResponse) {
-                    console.log('[CacheManager] Downloading:', item.title);
-                    await cache.add(request);
+                if (!item.url || item.url.startsWith('blob:')) {
+                    updatedItems.push(item);
                 } else {
-                    console.log('[CacheManager] Match found for:', item.title);
-                }
+                    const request = new Request(item.url, { mode: 'cors' });
+                    const matchingResponse = await cache.match(request);
 
-                // Create a Blob URL for the cached item to ensure offline access
-                // Note: We could just return the original URL and let the Service Worker handle it,
-                // but explicit Blob URLs are more robust if no SW is installed.
-                const response = await cache.match(request);
-                if (response) {
-                    const blob = await response.blob();
-                    const objectUrl = URL.createObjectURL(blob);
-                    return { ...item, src: objectUrl, originalUrl: item.url }; // src used by PlayerView
-                }
+                    if (!matchingResponse) {
+                        console.log('[CacheManager] Downloading:', item.title);
+                        await cache.add(request);
+                    } else {
+                        console.log('[CacheManager] Match found for:', item.title);
+                    }
 
-                return item;
+                    // We deliberately avoid creating Blob URLs here to reduce memory usage,
+                    // especially on constrained SmartTV browsers. The browser will still
+                    // use the HTTP cache / Cache Storage for subsequent requests.
+                    updatedItems.push({
+                        ...item,
+                        originalUrl: item.url
+                    });
+                }
             } catch (err) {
                 console.error('[CacheManager] Failed to cache item:', item.title, err);
-                return item; // Fallback to network URL
+                updatedItems.push(item); // Fallback to network URL
+            } finally {
+                completed += 1;
+                if (onProgress) {
+                    onProgress(completed, total);
+                }
             }
-        }));
+        }
 
         console.log('[CacheManager] Sync complete.');
         return { ...playlist, items: updatedItems };
@@ -68,16 +82,9 @@ export const cacheManager = {
     },
 
     /**
-     * Helper to revoke object URLs to prevent memory leaks.
-     * Should be called when switching playlists.
-     * @param {Object} oldPlaylist 
+     * Helper kept for backwards-compatibility; no longer needed now that we avoid Blob URLs.
      */
-    revokeUrls(oldPlaylist) {
-        if (!oldPlaylist || !oldPlaylist.items) return;
-        oldPlaylist.items.forEach(item => {
-            if (item.src && item.src.startsWith('blob:')) {
-                URL.revokeObjectURL(item.src);
-            }
-        });
+    revokeUrls() {
+        // No-op: we no longer create object URLs, so nothing to revoke.
     }
 };

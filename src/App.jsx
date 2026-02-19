@@ -13,6 +13,7 @@ export default function App() {
   const [debugError, setDebugError] = useState(null);
   const [schemaError, setSchemaError] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
 
   // Keep references for proper cleanup and comparison
   const screenChannelRef = useRef(null);
@@ -182,6 +183,7 @@ export default function App() {
 
   const fetchPlaylist = async (playlistId) => {
     setIsSyncing(true);
+    setLoadingProgress(0);
     try {
       const { data, error } = await supabase
         .from('playlists')
@@ -190,13 +192,11 @@ export default function App() {
         .single();
 
       if (data) {
-        // Cache the content before setting it
-        const cachedPlaylist = await cacheManager.cachePlaylist(data);
-
-        // Revoke old URLs if switching playlists
-        if (playlist) {
-          cacheManager.revokeUrls(playlist);
-        }
+        // Cache the content before setting it, while reporting progress
+        const cachedPlaylist = await cacheManager.cachePlaylist(data, (completed, total) => {
+          const pct = total > 0 ? Math.round((completed / total) * 100) : 100;
+          setLoadingProgress(pct);
+        });
 
         setPlaylist(cachedPlaylist);
 
@@ -206,6 +206,7 @@ export default function App() {
     } catch (e) {
       console.error("Fetch/Cache Error:", e);
     } finally {
+      setLoadingProgress(100);
       setIsSyncing(false);
     }
   }
@@ -327,13 +328,36 @@ export default function App() {
     return <PairingView code={pairingCode} />;
   }
 
+  // Initial/fullscreen loading while media is being cached for the first time
+  if (status === 'active' && !playlist && isSyncing) {
+    return (
+      <div className="bg-black text-white h-screen flex flex-col items-center justify-center gap-6">
+        <div className="text-2xl font-bold">Lumia Player</div>
+        <div className="text-sm text-gray-400">Carregando mídias e preparando a playlist...</div>
+        <div className="w-2/3 max-w-md">
+          <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+            <div
+              className="h-2 bg-blue-500 transition-all duration-300"
+              style={{ width: `${loadingProgress}%` }}
+            />
+          </div>
+          <div className="mt-2 text-center text-xs text-gray-400 font-mono">
+            {loadingProgress}%
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <PlayerView screenId={screenData?.id} initialPlaylist={playlist} />
       {isSyncing && (
         <div className="fixed top-4 right-4 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-2 z-50 animate-pulse">
           <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" />
-          <span className="text-xs text-white/80 font-mono">SYNCING</span>
+          <span className="text-xs text-white/80 font-mono">
+            SYNCING{loadingProgress > 0 && loadingProgress < 100 ? ` ${loadingProgress}%` : ''}
+          </span>
         </div>
       )}
     </>
