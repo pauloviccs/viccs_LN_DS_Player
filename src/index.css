@@ -16,4 +16,10 @@ body {
   color: white;
   overflow: hidden;
   /* Hide scrollbars for player */
+  cursor: none !important; /* SmartTV Patch: Hide cursor */
+}
+
+/* Ensure cursor is hidden on all elements */
+* {
+    cursor: none !important;
 }

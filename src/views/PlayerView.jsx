@@ -18,6 +18,26 @@ export default function PlayerView({ screenId, initialPlaylist }) {
     // If playlist is passed as prop 'playlist' (from App.jsx port), use it.
     // The reference passed 'playlist' prop.
 
+    // SmartTV Patch: Force Fullscreen
+    const enterFullscreen = () => {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+            elem.requestFullscreen().catch(err => console.log("Fullscreen request denied:", err));
+        } else if (elem.webkitRequestFullscreen) { /* Safari */
+            elem.webkitRequestFullscreen();
+        } else if (elem.msRequestFullscreen) { /* IE11 */
+            elem.msRequestFullscreen();
+        }
+    };
+
+    useEffect(() => {
+        // Attempt to enter fullscreen on mount (might be blocked by browser policy without interaction)
+        const timer = setTimeout(() => {
+            enterFullscreen();
+        }, 1000);
+        return () => clearTimeout(timer);
+    }, []);
+
     const items = playlist?.items || [];
 
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -111,7 +131,10 @@ export default function PlayerView({ screenId, initialPlaylist }) {
     }
 
     return (
-        <div className="bg-black w-full h-full relative overflow-hidden">
+        <div
+            className="bg-black w-full h-full relative overflow-hidden"
+            onClick={enterFullscreen} // SmartTV Patch: Click to force fullscreen if auto fails
+        >
 
             {activeItem?.type === 'video' ? (
                 <video
