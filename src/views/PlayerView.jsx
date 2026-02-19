@@ -21,7 +21,6 @@ export default function PlayerView({ screenId, initialPlaylist }) {
     const items = playlist?.items || [];
 
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [needsInteraction, setNeedsInteraction] = useState(false);
 
     const activeItem = items[currentIndex];
     const videoRef = useRef(null);
@@ -63,27 +62,14 @@ export default function PlayerView({ screenId, initialPlaylist }) {
                 videoRef.current.currentTime = 0;
                 videoRef.current.muted = true; // Force muted for autoplay policy
 
-                const playPromise = videoRef.current.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(e => {
-                        console.error("Autoplay Error:", e);
-                        setNeedsInteraction(true);
-                    });
-                }
+                videoRef.current.play().catch(e => {
+                    console.error("Autoplay Error:", e);
+                });
             }
         }
 
         return () => clearTimeout(timeoutRef.current);
     }, [activeItem, currentIndex]); // Add currentIndex dependency to ensure re-run on change
-
-    const handleUserInteraction = () => {
-        setNeedsInteraction(false);
-        const videos = document.querySelectorAll('video');
-        videos.forEach(v => {
-            v.muted = false;
-            v.play().catch(e => console.error("Retry failed:", e));
-        });
-    };
 
     if (items.length === 0) {
         return (
@@ -98,7 +84,7 @@ export default function PlayerView({ screenId, initialPlaylist }) {
     }
 
     return (
-        <div className="bg-black w-full h-full relative overflow-hidden" onClick={() => { if (needsInteraction) handleUserInteraction(); }}>
+        <div className="bg-black w-full h-full relative overflow-hidden">
 
             {activeItem?.type === 'video' ? (
                 <video
@@ -127,21 +113,6 @@ export default function PlayerView({ screenId, initialPlaylist }) {
                         setTimeout(nextItem, 1000);
                     }}
                 />
-            )}
-
-            {/* Interaction Overlay */}
-            {needsInteraction && (
-                <div
-                    className="absolute inset-0 flex items-center justify-center bg-black/90 cursor-pointer"
-                    style={{ zIndex: 9999, pointerEvents: 'auto' }}
-                    onClick={handleUserInteraction}
-                >
-                    <div className="text-center">
-                        <div className="text-6xl mb-6 text-yellow-400">👆</div>
-                        <h2 className="text-4xl font-bold text-white mb-2">Toque para Iniciar</h2>
-                        <button className="mt-4 px-6 py-2 bg-yellow-500 text-black font-bold rounded">INICIAR</button>
-                    </div>
-                </div>
             )}
         </div>
     );
