@@ -388,6 +388,36 @@ export default function App() {
     );
   }
 
+  // Fail-safe: refresh pairing code every minute while on pairing screen
+  useEffect(() => {
+    if (status !== 'pairing') return;
+
+    const refreshCode = async () => {
+      const deviceId = getDeviceId();
+      const code = generatePairingCode();
+
+      console.log('[Player] Fail-safe: refreshing pairing code:', code);
+
+      setPairingCode(code);
+
+      await supabase
+        .from('screens')
+        .upsert({
+          id: deviceId,
+          name: screenData?.name || `TV-${code}`,
+          status: 'pending',
+          pairing_code: code,
+          assigned_to: null,
+          playlist_id: null,
+          last_ping: new Date()
+        });
+    };
+
+    const intervalId = setInterval(refreshCode, 60000); // 60s
+
+    return () => clearInterval(intervalId);
+  }, [status, screenData?.name]);
+
   if (status === 'pairing') {
     return <PairingView code={pairingCode} />;
   }
