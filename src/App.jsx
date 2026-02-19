@@ -11,6 +11,16 @@ export default function App() {
   const [playlist, setPlaylist] = useState(null);
   const [debugError, setDebugError] = useState(null);
 
+  if (!supabase) {
+    return (
+      <div className="bg-black text-white h-screen flex flex-col items-center justify-center p-8 text-center">
+        <h1 className="text-3xl font-bold text-red-500 mb-4">Configuration Error</h1>
+        <p className="mb-4">Missing Supabase URL or Anonymous Key.</p>
+        <p className="text-gray-500 text-sm">Please check your .env file or Vercel Environment Variables.</p>
+      </div>
+    )
+  }
+
   useEffect(() => {
     const initializePlayer = async () => {
       try {
