@@ -20,6 +20,52 @@ export default function App() {
   const pingIntervalRef = useRef(null);
   const previousScreenRef = useRef(null);
 
+  const enterPairingMode = async (reason) => {
+    try {
+      const deviceId = getDeviceId();
+      const code = generatePairingCode();
+
+      console.log('[Player] Entering pairing mode:', { reason, deviceId, code });
+
+      // Stop playback immediately
+      setPlaylist(null);
+      setLoadingProgress(0);
+      setIsSyncing(false);
+
+      // Reset screen tracking so next UPDATE is treated as fresh
+      previousScreenRef.current = null;
+
+      // Show pairing UI right away
+      setPairingCode(code);
+      setStatus('pairing');
+
+      // Re-create the pending screen row so the admin can pair it manually using the code.
+      // Note: Dashboard list is filtered to paired screens only, so this won't "auto-add" to Screens UI.
+      const { data, error } = await supabase
+        .from('screens')
+        .upsert({
+          id: deviceId,
+          name: screenData?.name || `TV-${code}`,
+          status: 'pending',
+          pairing_code: code,
+          assigned_to: null,
+          playlist_id: null,
+          last_ping: new Date()
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[Player] Failed to upsert pending screen row:', error);
+        return;
+      }
+
+      setScreenData(data);
+    } catch (e) {
+      console.error('[Player] Failed to enter pairing mode:', e);
+    }
+  };
+
   if (!supabase) {
     return (
       <div className="bg-black text-white h-screen flex flex-col items-center justify-center p-8 text-center">
@@ -112,6 +158,14 @@ export default function App() {
               handleScreenState(payload.new);
             }
           )
+          .on(
+            'postgres_changes',
+            { event: 'DELETE', schema: 'public', table: 'screens', filter: `id=eq.${deviceId}` },
+            (payload) => {
+              console.log('[Realtime] Screen deleted (unpaired):', payload);
+              enterPairingMode('screen_deleted');
+            }
+          )
           .subscribe();
 
         // 3. Periodic Ping (Heartbeat)
@@ -120,10 +174,14 @@ export default function App() {
         }
 
         pingIntervalRef.current = setInterval(async () => {
-          await supabase
+          const { error } = await supabase
             .from('screens')
             .update({ last_ping: new Date() })
             .eq('id', deviceId);
+
+          if (error) {
+            console.error('[Heartbeat] Ping failed:', error);
+          }
         }, 30000); // 30s ping
 
       } catch (e) {
@@ -253,10 +311,16 @@ export default function App() {
           return;
         }
 
-        if (!isCancelled && data) {
-          console.log('[Polling] Screen state fetched:', data);
-          handleScreenState(data);
+        if (isCancelled) return;
+
+        if (!data) {
+          console.log('[Polling] Screen row missing (likely unpaired).');
+          enterPairingMode('screen_missing');
+          return;
         }
+
+        console.log('[Polling] Screen state fetched:', data);
+        handleScreenState(data);
       } catch (e) {
         console.error('[Polling] Screen fetch exception:', e);
       }
