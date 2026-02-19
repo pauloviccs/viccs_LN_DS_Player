@@ -12,6 +12,7 @@ export default function App() {
   const [playlist, setPlaylist] = useState(null);
   const [debugError, setDebugError] = useState(null);
   const [schemaError, setSchemaError] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   if (!supabase) {
     return (
