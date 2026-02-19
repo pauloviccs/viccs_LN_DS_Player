@@ -26,9 +26,11 @@ export default function PlayerView({ screenId, initialPlaylist }) {
     const videoRef = useRef(null);
     const timeoutRef = useRef(null);
 
-    // Update internal playlist if prop changes (if functionality requires it)
+    // Update internal playlist whenever prop changes (including clearing it)
     useEffect(() => {
-        if (initialPlaylist) setPlaylist(initialPlaylist);
+        setPlaylist(initialPlaylist || null);
+        // Reset index when playlist changes to avoid out-of-bounds
+        setCurrentIndex(0);
     }, [initialPlaylist]);
 
     // Resolve URL
