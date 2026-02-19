@@ -9,8 +9,8 @@ export default function PairingView({ code }) {
             <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/30 rounded-full blur-[120px] animate-pulse" />
             <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-600/30 rounded-full blur-[120px] animate-pulse delay-1000" />
 
-            {/* Glass Card */}
-            <div className="relative z-10 w-full max-w-lg bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl p-12 shadow-2xl flex flex-col items-center text-center animate-fade-in-up">
+            {/* Solid Card for TV Performance */}
+            <div className="relative z-10 w-full max-w-lg bg-[#111111] border border-white/20 rounded-3xl p-12 shadow-2xl flex flex-col items-center text-center animate-fade-in-up">
 
                 {/* Header Icon */}
                 <div className="mb-8 p-4 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-2xl border border-white/10 shadow-inner">
@@ -25,10 +25,10 @@ export default function PairingView({ code }) {
                     Conecte esta tela ao seu painel
                 </p>
 
-                {/* Pairing Code */}
                 <div className="relative group mb-10">
-                    <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000" />
-                    <div className="relative bg-black/40 backdrop-blur-sm border border-white/10 rounded-2xl px-12 py-6">
+                    {/* Simplified Background */}
+                    <div className="absolute -inset-1 bg-blue-900/50 rounded-2xl opacity-20" />
+                    <div className="relative bg-[#000000] border border-white/20 rounded-2xl px-12 py-6">
                         <span className="text-7xl font-mono font-bold tracking-[0.2em] text-white drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]">
                             {code}
                         </span>
@@ -36,7 +36,7 @@ export default function PairingView({ code }) {
                 </div>
 
                 {/* Status Indicator */}
-                <div className="flex items-center space-x-3 bg-white/5 px-4 py-2 rounded-full border border-white/5">
+                <div className="flex items-center space-x-3 bg-white/10 px-4 py-2 rounded-full border border-white/10">
                     <div className="relative flex h-3 w-3">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
