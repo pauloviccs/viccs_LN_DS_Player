@@ -182,7 +182,7 @@ export default function App() {
           if (error) {
             console.error('[Heartbeat] Ping failed:', error);
           }
-        }, 30000); // 30s ping
+        }, 90000); // 90s ping — reduced from 30s to cut DB requests by 66%
 
       } catch (e) {
         console.error("Init Error:", e);
@@ -302,7 +302,7 @@ export default function App() {
       try {
         const { data, error } = await supabase
           .from('screens')
-          .select('*')
+          .select('id,status,pairing_code,playlist_id,assigned_to,updated_at,name,last_ping')
           .eq('id', deviceId)
           .maybeSingle();
 
@@ -336,46 +336,9 @@ export default function App() {
     };
   }, []);
 
-  // Fallback polling: periodically re-fetch current playlist
-  useEffect(() => {
-    if (!playlist?.id) return;
-
-    let isCancelled = false;
-
-    const pollPlaylist = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('playlists')
-          .select('*')
-          .eq('id', playlist.id)
-          .single();
-
-        if (error) {
-          console.error('[Polling] Playlist fetch error:', error);
-          return;
-        }
-
-        if (isCancelled || !data) return;
-
-        // If updated_at changed, refetch and resync with cache pipeline
-        if (!playlist.updated_at || data.updated_at !== playlist.updated_at) {
-          console.log('[Polling] Playlist changed (updated_at), refetching:', playlist.id);
-          fetchPlaylist(playlist.id);
-        }
-      } catch (e) {
-        console.error('[Polling] Playlist fetch exception:', e);
-      }
-    };
-
-    // Initial poll and interval
-    pollPlaylist();
-    const intervalId = setInterval(pollPlaylist, 60000); // 60s
-
-    return () => {
-      isCancelled = true;
-      clearInterval(intervalId);
-    };
-  }, [playlist?.id, playlist?.updated_at]);
+  // NOTE: Playlist polling removed — Realtime channel (above) already detects
+  // UPDATE events on the playlists table and calls fetchPlaylist() when needed.
+  // The redundant 60s poll was causing unnecessary Supabase Storage Cached Egress.
 
   // Fail-safe: refresh pairing code every minute while on pairing screen
   useEffect(() => {
@@ -389,17 +352,16 @@ export default function App() {
 
       setPairingCode(code);
 
+      // Use UPDATE (not upsert) to avoid accidentally zeroing playlist_id / assigned_to
+      // on a race condition where the admin just paired the screen.
       await supabase
         .from('screens')
-        .upsert({
-          id: deviceId,
-          name: screenData?.name || `TV-${code}`,
-          status: 'pending',
+        .update({
           pairing_code: code,
-          assigned_to: null,
-          playlist_id: null,
+          status: 'pending',
           last_ping: new Date()
-        });
+        })
+        .eq('id', deviceId);
     };
 
     const intervalId = setInterval(refreshCode, 60000); // 60s

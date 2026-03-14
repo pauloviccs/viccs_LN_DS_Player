@@ -56,30 +56,8 @@ export default function PlayerView({ screenId, initialPlaylist }) {
     // Resolve URL
     const src = useMemo(() => getMediaSrc(activeItem), [activeItem]);
 
-    // Preload próxima mídia para reduzir tela preta em TVs
-    useEffect(() => {
-        if (!items.length) return;
 
-        const nextIndex = items.length > 1 ? (currentIndex + 1) % items.length : 0;
-        const nextItem = items[nextIndex];
-        if (!nextItem) return;
 
-        const nextSrc = getMediaSrc(nextItem);
-        if (!nextSrc) return;
-
-        try {
-            if (nextItem.type === 'image') {
-                const img = new Image();
-                img.src = nextSrc;
-            } else if (nextItem.type === 'video') {
-                const video = document.createElement('video');
-                video.preload = 'metadata';
-                video.src = nextSrc;
-            }
-        } catch (e) {
-            console.error('Preload error:', e);
-        }
-    }, [items, currentIndex]);
 
     const nextItem = () => {
         if (!items.length) return;
