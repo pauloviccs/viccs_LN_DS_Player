@@ -39,24 +39,22 @@ export default function App() {
       setPairingCode(code);
       setStatus('pairing');
 
-      // Re-create the pending screen row so the admin can pair it manually using the code.
-      // Note: Dashboard list is filtered to paired screens only, so this won't "auto-add" to Screens UI.
+      // Update ONLY the columns that anon is allowed to touch (via GRANT).
+      // assigned_to and playlist_id are admin-only columns — the admin clears
+      // them from the Dashboard when re-pairing.
       const { data, error } = await supabase
         .from('screens')
-        .upsert({
-          id: deviceId,
-          name: screenData?.name || `TV-${code}`,
+        .update({
           status: 'pending',
           pairing_code: code,
-          assigned_to: null,
-          playlist_id: null,
           last_ping: new Date()
         })
+        .eq('id', deviceId)
         .select()
         .single();
 
       if (error) {
-        console.error('[Player] Failed to upsert pending screen row:', error);
+        console.error('[Player] Failed to update screen to pending:', error);
         return;
       }
 
@@ -127,7 +125,7 @@ export default function App() {
           const code = generatePairingCode();
           const { data: newScreen, error: createError } = await supabase
             .from('screens')
-            .upsert({
+            .insert({
               id: deviceId,
               name: `TV-${code}`,
               status: 'pending',
