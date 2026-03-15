@@ -99,9 +99,20 @@ export default function PlayerView({ screenId, initialPlaylist }) {
     if (items.length === 0) {
         return (
             <div className="bg-black flex items-center justify-center h-screen text-white">
-                <div className="text-center">
+                <div className="text-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    {/* Spinner ring — CSS-only, SmartTV-safe */}
+                    <div className="lumia-spinner" style={{ marginBottom: '24px' }}></div>
+
                     <p className="text-xl font-bold mb-2">Lumia Player</p>
-                    <p className="text-white/50">Aguardando conteúdo...</p>
+                    <p className="lumia-pulse-text" style={{ color: 'rgba(255,255,255,0.5)' }}>Aguardando conteúdo</p>
+
+                    {/* Bouncing dots — replace static "..." */}
+                    <div style={{ marginTop: '8px', display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                        <span className="lumia-dot"></span>
+                        <span className="lumia-dot"></span>
+                        <span className="lumia-dot"></span>
+                    </div>
+
                     <p className="text-xs text-white/30 mt-4 font-mono">{screenId}</p>
                 </div>
             </div>

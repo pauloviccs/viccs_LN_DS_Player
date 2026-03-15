@@ -23,3 +23,60 @@ body {
 * {
     cursor: none !important;
 }
+
+/* ── Waiting Screen Animations (SmartTV-safe: CSS keyframes only) ── */
+
+@-webkit-keyframes lumia-spin {
+  0%   { -webkit-transform: rotate(0deg);   transform: rotate(0deg); }
+  100% { -webkit-transform: rotate(360deg); transform: rotate(360deg); }
+}
+@keyframes lumia-spin {
+  0%   { -webkit-transform: rotate(0deg);   transform: rotate(0deg); }
+  100% { -webkit-transform: rotate(360deg); transform: rotate(360deg); }
+}
+
+@-webkit-keyframes lumia-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+@keyframes lumia-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+
+@-webkit-keyframes lumia-dot-bounce {
+  0%, 80%, 100% { -webkit-transform: scale(0.6); transform: scale(0.6); opacity: 0.3; }
+  40%           { -webkit-transform: scale(1);    transform: scale(1);   opacity: 1; }
+}
+@keyframes lumia-dot-bounce {
+  0%, 80%, 100% { -webkit-transform: scale(0.6); transform: scale(0.6); opacity: 0.3; }
+  40%           { -webkit-transform: scale(1);    transform: scale(1);   opacity: 1; }
+}
+
+.lumia-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  -webkit-animation: lumia-spin 1s linear infinite;
+  animation: lumia-spin 1s linear infinite;
+}
+
+.lumia-pulse-text {
+  -webkit-animation: lumia-pulse 2s ease-in-out infinite;
+  animation: lumia-pulse 2s ease-in-out infinite;
+}
+
+.lumia-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.5);
+  -webkit-animation: lumia-dot-bounce 1.4s ease-in-out infinite both;
+  animation: lumia-dot-bounce 1.4s ease-in-out infinite both;
+}
+.lumia-dot:nth-child(1) { -webkit-animation-delay: 0s;    animation-delay: 0s; }
+.lumia-dot:nth-child(2) { -webkit-animation-delay: 0.16s; animation-delay: 0.16s; }
+.lumia-dot:nth-child(3) { -webkit-animation-delay: 0.32s; animation-delay: 0.32s; }
