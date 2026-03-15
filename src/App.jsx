@@ -307,7 +307,7 @@ export default function App() {
       try {
         const { data, error } = await supabase
           .from('screens')
-          .select('id,status,pairing_code,playlist_id,assigned_to,updated_at,name,last_ping')
+          .select('id,status,pairing_code,playlist_id,assigned_to,created_at,name,last_ping')
           .eq('id', deviceId)
           .maybeSingle();
 
