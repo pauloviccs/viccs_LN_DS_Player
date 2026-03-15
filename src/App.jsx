@@ -174,15 +174,20 @@ export default function App() {
         }
 
         pingIntervalRef.current = setInterval(async () => {
-          const { error } = await supabase
-            .from('screens')
-            .update({ last_ping: new Date() })
-            .eq('id', deviceId);
+          // Roda os dois em paralelo: atualiza o relógio da TV E registra o evento histórico
+          const [pingResult, eventResult] = await Promise.all([
+            supabase
+              .from('screens')
+              .update({ last_ping: new Date() })
+              .eq('id', deviceId),
+            supabase
+              .from('screen_events')
+              .insert({ screen_id: deviceId, event_type: 'heartbeat' }),
+          ]);
 
-          if (error) {
-            console.error('[Heartbeat] Ping failed:', error);
-          }
-        }, 90000); // 90s ping — reduced from 30s to cut DB requests by 66%
+          if (pingResult.error)  console.error('[Heartbeat] Ping failed:', pingResult.error);
+          if (eventResult.error) console.error('[Heartbeat] Event log failed:', eventResult.error);
+        }, 90000); // 90s ping — grava heartbeat em screen_events para histórico do gráfico
 
       } catch (e) {
         console.error("Init Error:", e);
