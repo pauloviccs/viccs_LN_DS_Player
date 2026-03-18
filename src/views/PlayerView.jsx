@@ -100,13 +100,75 @@ export default function PlayerView({ screenId, initialPlaylist }) {
 
     // ── Derived values ────────────────────────────────────────────────
     const activeItem = items[currentIndex];
-    const src = activeItem ? getMediaSrc(activeItem) : '';
+
+    // State for the currently resolving source (Native URL or Blob URL)
+    const [mediaSrc, setMediaSrc] = useState('');
+
+    // ── JIT Blob URL for Videos (Bypass SW for LG WebOS) ──────────────
+    useEffect(() => {
+        let objectUrl = null;
+        let isCancelled = false;
+
+        async function resolveSource() {
+            if (!activeItem) return;
+
+            const originalUrl = activeItem.originalUrl || activeItem.url || activeItem.src;
+
+            // If it's an image, or already a blob, just use the URL directly
+            if (activeItem.type === 'image' || originalUrl.startsWith('blob:')) {
+                setMediaSrc(originalUrl);
+                return;
+            }
+
+            // For videos: Try to load from Cache API and create a JIT Blob URL to prevent SW stalling on LG WebOS
+            dbg(`Resolving JIT Blob for ${activeItem.name || 'video'}...`);
+            try {
+                const cache = await caches.open('lumia-media-v1');
+                const response = await cache.match(originalUrl);
+
+                if (response && !isCancelled) {
+                    const blob = await response.blob();
+                    if (!isCancelled) {
+                        objectUrl = URL.createObjectURL(blob);
+                        dbg(`JIT Blob created: ${objectUrl.substring(0, 30)}...`);
+                        setMediaSrc(objectUrl);
+                    }
+                } else if (!isCancelled) {
+                    // Fallback if not in cache
+                    dbg(`JIT Blob failed - not in cache, fallback to network`);
+                    setMediaSrc(originalUrl);
+                }
+            } catch (err) {
+                if (!isCancelled) {
+                    dbg(`JIT Error: ${err.message}. Fallback to network.`);
+                    setMediaSrc(originalUrl);
+                }
+            }
+        }
+
+        resolveSource();
+
+        return () => {
+            isCancelled = true;
+            if (objectUrl) {
+                // Aggressively revoke the URL to prevent Out of Memory crashes on TVs
+                URL.revokeObjectURL(objectUrl);
+                dbg(`Revoked JIT Blob`);
+            }
+        };
+    }, [activeItem, dbg]);
 
     // ── tryPlay: attempts to play with retries ────────────────────────
     const tryPlay = useCallback((attempt = 1) => {
         const video = videoRef.current;
         if (!video) {
             dbg('tryPlay: no video element ref');
+            return;
+        }
+
+        // Wait until mediaSrc is fully resolved into state
+        if (!video.src || video.src === window.location.href || video.src.endsWith('/')) {
+            dbg('tryPlay postponed: src not ready');
             return;
         }
 
@@ -299,7 +361,7 @@ export default function PlayerView({ screenId, initialPlaylist }) {
                 <video
                     key={`video-${currentIndex}`}
                     ref={videoRef}
-                    src={src}
+                    src={mediaSrc}
                     className="w-full h-full object-cover"
                     style={{ backgroundColor: '#000', width: '100%', height: '100%' }}
                     muted
@@ -317,7 +379,7 @@ export default function PlayerView({ screenId, initialPlaylist }) {
             ) : (
                 <img
                     key={`img-${currentIndex}`}
-                    src={src}
+                    src={mediaSrc}
                     className="w-full h-full object-cover"
                     style={{ backgroundColor: '#000', width: '100%', height: '100%' }}
                     alt="Content"
@@ -327,7 +389,6 @@ export default function PlayerView({ screenId, initialPlaylist }) {
 
             {/* ── Visual Debug Overlay ─────────────────────────────────── */}
             {/* Shows on Smart TVs where DevTools is not available */}
-            {/* Auto-hides after 30s, tap to toggle */}
             {showDebug && (
                 <div
                     style={{
@@ -348,7 +409,7 @@ export default function PlayerView({ screenId, initialPlaylist }) {
                     <div>📺 Lumia Debug | {screenId?.substring(0, 8)}</div>
                     <div>🎬 [{currentIndex + 1}/{items.length}] {activeItem?.name || activeItem?.title || 'Unknown'}</div>
                     <div>📝 {debugInfo}</div>
-                    <div>🔗 {src?.split('/').pop()?.substring(0, 40) || 'no src'}</div>
+                    <div>🔗 {mediaSrc?.startsWith('blob:') ? 'blob: [JIT Memory]' : mediaSrc?.split('/').pop()?.substring(0, 40) || 'no src'}</div>
                 </div>
             )}
         </div>
