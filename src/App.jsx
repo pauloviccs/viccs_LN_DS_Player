@@ -206,6 +206,9 @@ export default function App() {
     }
   }, []);
 
+  // Ref to track current playlist — avoids stale closure in handleScreenState
+  const playlistRef = useRef(null);
+
   const handleScreenState = async (screen) => {
     console.log("Handling state:", screen);
     const previousScreen = previousScreenRef.current;
@@ -221,16 +224,24 @@ export default function App() {
       setStatus('active');
       // Fetch Playlist if assigned
       if (nextPlaylistId) {
-        // Only refetch if playlist changed or we don't have one yet
-        if (!previousPlaylistId || previousPlaylistId !== nextPlaylistId || !playlist) {
-          console.log('[Player] Playlist change detected:', previousPlaylistId, '->', nextPlaylistId);
+        // CRITICAL FIX: Use playlistRef.current instead of `playlist` (closure)
+        // The old `!playlist` was ALWAYS true during polling because the closure
+        // captured `playlist` from the render where handleScreenState was defined.
+        const currentPlaylistId = playlistRef.current?.id || null;
+        const needsFetch = !currentPlaylistId || currentPlaylistId !== nextPlaylistId;
+
+        if (needsFetch) {
+          console.log('[Player] Playlist change detected:', currentPlaylistId, '->', nextPlaylistId);
           fetchPlaylist(nextPlaylistId);
+        } else {
+          console.log('[Player] Playlist unchanged, skipping re-fetch. Current:', currentPlaylistId);
         }
       } else {
-        // No playlist assigned anymore – clear current playlist and revoke URLs
-        if (playlist) {
-          cacheManager.revokeUrls(playlist);
+        // No playlist assigned anymore – clear current playlist
+        if (playlistRef.current) {
+          cacheManager.revokeUrls(playlistRef.current);
         }
+        playlistRef.current = null;
         setPlaylist(null);
       }
     } else {
@@ -272,6 +283,7 @@ export default function App() {
           setLoadingProgress(pct);
         });
 
+        playlistRef.current = cachedPlaylist;
         setPlaylist(cachedPlaylist);
 
         // Cleanup unused cache
@@ -344,7 +356,7 @@ export default function App() {
 
     // Initial poll and interval
     pollScreen();
-    const intervalId = setInterval(pollScreen, 60000); // 60s
+    const intervalId = setInterval(pollScreen, 180000); // 180s — safety-net only, Realtime handles immediate updates
 
     return () => {
       isCancelled = true;
