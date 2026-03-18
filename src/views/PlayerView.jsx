@@ -52,12 +52,6 @@ export default function PlayerView({ screenId, initialPlaylist }) {
         return () => clearTimeout(timer);
     }, [enterFullscreen]);
 
-    // Auto-hide debug overlay after 30 seconds
-    useEffect(() => {
-        const timer = setTimeout(() => setShowDebug(false), 30000);
-        return () => clearTimeout(timer);
-    }, []);
-
     // ── Update internal playlist when prop changes ────────────────────
     useEffect(() => {
         setPlaylist(initialPlaylist || null);
