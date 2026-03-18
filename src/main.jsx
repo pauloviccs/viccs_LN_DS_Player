@@ -1,12 +1,12 @@
-import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 
+// StrictMode removed intentionally — for a 24/7 digital signage player,
+// the double-mount behavior creates duplicate timers and race conditions
+// that break playlist sequencing on SmartTVs.
 createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+  <App />,
 )
 
 // Register Service Worker for media cache-first strategy

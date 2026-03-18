@@ -80,3 +80,41 @@ body {
 .lumia-dot:nth-child(1) { -webkit-animation-delay: 0s;    animation-delay: 0s; }
 .lumia-dot:nth-child(2) { -webkit-animation-delay: 0.16s; animation-delay: 0.16s; }
 .lumia-dot:nth-child(3) { -webkit-animation-delay: 0.32s; animation-delay: 0.32s; }
+
+/* ── SmartTV Patch: Hide native video controls & broken poster ─────── */
+/* TCL Android TV and other smart TV browsers show a large play icon
+   when the <video> element fails to autoplay or load. These rules
+   suppress the native controls and ensure a black background. */
+video::-webkit-media-controls {
+  display: none !important;
+  -webkit-appearance: none;
+}
+video::-webkit-media-controls-panel {
+  display: none !important;
+  -webkit-appearance: none;
+}
+video::-webkit-media-controls-play-button {
+  display: none !important;
+  -webkit-appearance: none;
+}
+video::-webkit-media-controls-start-playback-button {
+  display: none !important;
+  -webkit-appearance: none;
+}
+video {
+  background-color: #000 !important;
+  -webkit-tap-highlight-color: transparent;
+}
+img {
+  background-color: #000 !important;
+}
+
+/* ── SmartTV Patch: Disable backdrop-filter (unsupported on old WebViews) ── */
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .backdrop-blur-md,
+  [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background-color: rgba(0, 0, 0, 0.85) !important;
+  }
+}

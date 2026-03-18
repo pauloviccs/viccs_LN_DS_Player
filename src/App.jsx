@@ -183,7 +183,7 @@ export default function App() {
               .insert({ screen_id: deviceId, event_type: 'heartbeat' }),
           ]);
 
-          if (pingResult.error)  console.error('[Heartbeat] Ping failed:', pingResult.error);
+          if (pingResult.error) console.error('[Heartbeat] Ping failed:', pingResult.error);
           if (eventResult.error) console.error('[Heartbeat] Event log failed:', eventResult.error);
         }, 90000); // 90s ping — grava heartbeat em screen_events para histórico do gráfico
 
@@ -253,6 +253,19 @@ export default function App() {
         .single();
 
       if (data) {
+        // Sort items by explicit 'order' field if present (set by PlaylistEditor)
+        // This guarantees deterministic sequencing regardless of JSON parse order
+        if (data.items && Array.isArray(data.items)) {
+          data.items.sort((a, b) => {
+            if (a.order !== undefined && b.order !== undefined) {
+              return a.order - b.order;
+            }
+            return 0; // Preserve original order if 'order' field is missing
+          });
+        }
+
+        console.log('[Player] Playlist loaded:', data.name, '— items:', data.items?.length);
+
         // Cache the content before setting it, while reporting progress
         const cachedPlaylist = await cacheManager.cachePlaylist(data, (completed, total) => {
           const pct = total > 0 ? Math.round((completed / total) * 100) : 100;
