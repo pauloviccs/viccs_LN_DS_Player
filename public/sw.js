@@ -50,27 +50,62 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
-      // 1. Try cache first (Cache-First strategy)
-      const cachedResponse = await cache.match(request);
-      if (cachedResponse) {
-        console.log('[SW] Cache HIT:', request.url.split('/').pop());
-        return cachedResponse;
-      }
-
-      // 2. Cache miss — fetch from network and store
       try {
+        // 1. Try cache first (Cache-First strategy)
+        const cachedResponse = await cache.match(request);
+
+        if (cachedResponse) {
+          // Check if this is a Range request (crucial for Smart TV video playback)
+          if (request.headers.has('range')) {
+            const rangeHeader = request.headers.get('range');
+            const buffer = await cachedResponse.arrayBuffer();
+
+            // Parse range: bytes=start-end
+            const bytesStr = rangeHeader.replace(/bytes=/, '').split('-');
+            const start = parseInt(bytesStr[0], 10);
+            const end = bytesStr[1] ? parseInt(bytesStr[1], 10) : buffer.byteLength - 1;
+            const chunkSize = end - start + 1;
+
+            // Slice the buffer for the requested range
+            const slicedBuffer = buffer.slice(start, end + 1);
+
+            console.log(`[SW] Cache HIT (Range ${start}-${end}):`, request.url.split('/').pop());
+
+            // Create a 206 Partial Content response
+            return new Response(slicedBuffer, {
+              status: 206,
+              statusText: 'Partial Content',
+              headers: new Headers({
+                'Content-Type': cachedResponse.headers.get('Content-Type') || 'video/mp4',
+                'Content-Range': `bytes ${start}-${end}/${buffer.byteLength}`,
+                'Content-Length': chunkSize.toString(),
+                'Accept-Ranges': 'bytes',
+                'Cache-Control': 'public, max-age=31536000'
+              })
+            });
+          }
+
+          // Regular request (not Range)
+          console.log('[SW] Cache HIT:', request.url.split('/').pop());
+          return cachedResponse;
+        }
+
+        // 2. Cache miss — fetch from network and store
         console.log('[SW] Cache MISS — fetching:', request.url.split('/').pop());
         const networkResponse = await fetch(request);
 
         // Only cache successful, non-opaque responses
-        if (networkResponse.ok) {
+        // Opaque responses (status 0) from cross-origin requests without CORS cannot be reliably read for Range requests later
+        if (networkResponse.ok && networkResponse.type !== 'opaque') {
+          // Clone the response to put in cache since response bodies can only be consumed once
           cache.put(request, networkResponse.clone());
         }
 
         return networkResponse;
       } catch (err) {
         console.error('[SW] Fetch failed for:', request.url, err);
-        // Let the browser handle the error naturally
+
+        // If offline and fetching failed, we try to create an offline fallback or just let it fail
         throw err;
       }
     })
