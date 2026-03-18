@@ -254,14 +254,28 @@ export default function App() {
 
 
   const fetchPlaylist = async (playlistId) => {
+    console.log('[Player] >>> fetchPlaylist START for:', playlistId);
     setIsSyncing(true);
     setLoadingProgress(0);
     try {
+      console.log('[Player] Querying Supabase for playlist...');
       const { data, error } = await supabase
         .from('playlists')
         .select('*')
         .eq('id', playlistId)
         .single();
+
+      if (error) {
+        console.error('[Player] Supabase playlist query ERROR:', error);
+        return;
+      }
+
+      if (!data) {
+        console.error('[Player] Supabase returned NULL data for playlist:', playlistId);
+        return;
+      }
+
+      console.log('[Player] Playlist data received:', data.name, '— items:', data.items?.length);
 
       if (data) {
         // Sort items by explicit 'order' field if present (set by PlaylistEditor)
@@ -278,20 +292,27 @@ export default function App() {
         console.log('[Player] Playlist loaded:', data.name, '— items:', data.items?.length);
 
         // Cache the content before setting it, while reporting progress
+        console.log('[Player] Starting cachePlaylist...');
         const cachedPlaylist = await cacheManager.cachePlaylist(data, (completed, total) => {
           const pct = total > 0 ? Math.round((completed / total) * 100) : 100;
+          console.log(`[Player] Cache progress: ${completed}/${total} (${pct}%)`);
           setLoadingProgress(pct);
         });
+
+        console.log('[Player] cachePlaylist DONE. Setting playlist state...');
+        console.log('[Player] cachedPlaylist items:', cachedPlaylist?.items?.length);
 
         playlistRef.current = cachedPlaylist;
         setPlaylist(cachedPlaylist);
 
         // Cleanup unused cache
         cacheManager.cleanupCache(cachedPlaylist);
+        console.log('[Player] >>> fetchPlaylist COMPLETE');
       }
     } catch (e) {
-      console.error("Fetch/Cache Error:", e);
+      console.error('[Player] >>> fetchPlaylist EXCEPTION:', e);
     } finally {
+      console.log('[Player] >>> fetchPlaylist FINALLY — setting isSyncing=false');
       setLoadingProgress(100);
       setIsSyncing(false);
     }
@@ -398,6 +419,8 @@ export default function App() {
   }, [status, screenData?.name]);
 
   // All hooks must be declared before any conditional returns
+  console.log('[Player RENDER] status:', status, '| playlist:', !!playlist, '| items:', playlist?.items?.length, '| isSyncing:', isSyncing);
+
   if (status === 'loading') {
     return (
       <div className="bg-black text-white h-screen flex flex-col items-center justify-center gap-4">

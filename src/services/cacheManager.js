@@ -1,6 +1,15 @@
 
 const CACHE_NAME = 'lumia-media-v1';
 
+// Timeout wrapper: rejects after N ms to prevent infinite hangs
+const withTimeout = (promise, ms, label) =>
+    Promise.race([
+        promise,
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`[CacheManager] TIMEOUT after ${ms}ms: ${label}`)), ms)
+        ),
+    ]);
+
 export const cacheManager = {
     /**
      * Downloads and caches all media items in a playlist.
@@ -9,10 +18,22 @@ export const cacheManager = {
      * @returns {Promise<Object>} - The playlist with items pointing to cache-backed URLs.
      */
     async cachePlaylist(playlist, onProgress) {
-        if (!playlist || !playlist.items) return playlist;
+        if (!playlist || !playlist.items) {
+            console.log('[CacheManager] No playlist or items — skipping');
+            return playlist;
+        }
 
-        console.log('[CacheManager] Starting sync for:', playlist.name);
-        const cache = await caches.open(CACHE_NAME);
+        console.log('[CacheManager] Starting sync for:', playlist.name, '— items:', playlist.items.length);
+
+        let cache;
+        try {
+            cache = await caches.open(CACHE_NAME);
+            console.log('[CacheManager] Cache opened:', CACHE_NAME);
+        } catch (err) {
+            console.error('[CacheManager] FATAL: Cannot open Cache Storage:', err);
+            // Return playlist as-is — the browser will fetch directly from network
+            return playlist;
+        }
 
         const total = playlist.items.length;
         let completed = 0;
@@ -27,29 +48,31 @@ export const cacheManager = {
             try {
                 // If it's already a blob URL or invalid, skip
                 if (!item.url || item.url.startsWith('blob:')) {
+                    console.log('[CacheManager] Skipping (no url or blob):', item.title || item.name);
                     updatedItems.push(item);
                 } else {
                     const request = new Request(item.url, { mode: 'cors' });
                     const matchingResponse = await cache.match(request);
 
                     if (!matchingResponse) {
-                        console.log('[CacheManager] Downloading:', item.title);
-                        await cache.add(request);
+                        console.log('[CacheManager] MISS — downloading:', item.title || item.name);
+                        // Timeout of 30s per file to prevent infinite hangs on slow networks
+                        await withTimeout(cache.add(request), 30000, item.title || item.url);
+                        console.log('[CacheManager] Downloaded OK:', item.title || item.name);
                     } else {
-                        console.log('[CacheManager] Match found for:', item.title);
+                        console.log('[CacheManager] HIT:', item.title || item.name);
                     }
 
-                    // We deliberately avoid creating Blob URLs here to reduce memory usage,
-                    // especially on constrained SmartTV browsers. The browser will still
-                    // use the HTTP cache / Cache Storage for subsequent requests.
+                    // Keep the network URL — the Service Worker will intercept and serve from cache
                     updatedItems.push({
                         ...item,
                         originalUrl: item.url
                     });
                 }
             } catch (err) {
-                console.error('[CacheManager] Failed to cache item:', item.title, err);
-                updatedItems.push(item); // Fallback to network URL
+                console.error('[CacheManager] Failed to cache item:', item.title || item.name, err.message);
+                // IMPORTANT: Still push the item so it plays from network
+                updatedItems.push(item);
             } finally {
                 completed += 1;
                 if (onProgress) {
@@ -58,7 +81,7 @@ export const cacheManager = {
             }
         }
 
-        console.log('[CacheManager] Sync complete.');
+        console.log('[CacheManager] Sync complete. Items:', updatedItems.length);
         return { ...playlist, items: updatedItems };
     },
 
@@ -69,15 +92,19 @@ export const cacheManager = {
     async cleanupCache(activePlaylist) {
         if (!activePlaylist || !activePlaylist.items) return;
 
-        const cache = await caches.open(CACHE_NAME);
-        const keys = await cache.keys();
-        const activeUrls = new Set(activePlaylist.items.map(i => i.originalUrl || i.url));
+        try {
+            const cache = await caches.open(CACHE_NAME);
+            const keys = await cache.keys();
+            const activeUrls = new Set(activePlaylist.items.map(i => i.originalUrl || i.url));
 
-        for (const request of keys) {
-            if (!activeUrls.has(request.url)) {
-                console.log('[CacheManager] Deleting unused asset:', request.url);
-                await cache.delete(request);
+            for (const request of keys) {
+                if (!activeUrls.has(request.url)) {
+                    console.log('[CacheManager] Deleting unused asset:', request.url.split('/').pop());
+                    await cache.delete(request);
+                }
             }
+        } catch (err) {
+            console.error('[CacheManager] Cleanup error (non-critical):', err);
         }
     },
 
