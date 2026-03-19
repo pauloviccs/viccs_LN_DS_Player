@@ -27,3 +27,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Allow .agent files
+!.agent/
+!.agent/overview/
+!.agent/overview/PROJECT_STATUS.md

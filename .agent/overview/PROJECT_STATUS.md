@@ -26,20 +26,21 @@ Aplicação React leve e otimizada que roda nas telas físicas de digital signag
 ```text
 Lumia_DigitalSinage_Player/
 ├── .agent/                   # Arquivos de contexto do agente
-├── public/                   # Assets públicos (2 itens)
+├── public/                   # Assets públicos e Service Worker (sw.js)
 ├── src/
 │   ├── App.jsx               # Raiz + roteamento (14KB — lógica principal)
 │   ├── main.jsx              # Entry point com setup de device ID
-│   ├── index.css / App.css   # Estilos globais
+│   ├── index.css / App.css   # Estilos globais (inclui patches Smart TV)
 │   ├── assets/               # Assets estáticos
 │   ├── lib/
 │   │   ├── supabase.js       # Inicialização do client Supabase
-│   │   └── device.js         # Geração/leitura de device ID persistente
+│   │   ├── device.js         # Geração/leitura de device ID persistente
+│   │   └── platform.js       # Detecção de Smart TVs e parâmetros específicos
 │   ├── services/
-│   │   └── cacheManager.js   # Cache local de mídias (3.4KB)
+│   │   └── cacheManager.js   # Cache local de mídias (timeout otimizado)
 │   └── views/
 │       ├── PairingView.jsx   # Tela de pareamento com PIN
-│       └── PlayerView.jsx    # Player principal de mídia
+│       └── PlayerView.jsx    # Player principal de mídia (Persistent Video Pattern)
 ├── .env / .env.production    # Variáveis de ambiente
 ├── vite.config.js            # Build config com legacy + terser
 ├── tailwind.config.js
@@ -54,9 +55,11 @@ Lumia_DigitalSinage_Player/
 - **Player de Mídia** — renderização de playlists: imagens, vídeos e áudio em loop (`PlayerView.jsx`)
 - **Supabase Realtime** — subscriptions para receber atualizações de playlist/comandos em tempo real
 - **Cache de Mídias** — `cacheManager.js` gerencia cache local de arquivos para reduzir latência e dependência de rede
-- **Suporte Legacy** — build com `@vitejs/plugin-legacy` para rodar em smart TVs e hardware mais antigo
-- **Áudio** — suporte a trilha sonora via Howler.js
-- **Build otimizada** — Terser para minificação agressiva, Tailwind v3 purge para CSS mínimo
+- **Smart TV Cross-Platform** — Suporte a LG WebOS, Samsung Tizen, TCL Android TV e Philips via `platform.js`.
+- **Reprodução Otimizada** — Padrão de vídeo persistente e tratamento seguro de chamadas `play()` (race condition guards) garantem transições limpas.
+- **Service Worker Avançado** — Cache-first e fatiamento otimizado de Range Requests via `Blob.slice()` para não exceder a RAM de TVs limitadas (`sw.js`).
+- **CSS Anti-Flicker** — Camadas de composição de GPU implementadas em `index.css` para rodar liso em WebOS e Android TV.
+- **Build otimizada** — Terser para minificação agressiva, Tailwind v3 purge para CSS mínimo.
 
 ## Architecture Notes
 
@@ -73,4 +76,4 @@ Lumia_DigitalSinage_Player/
 
 ## Last Synced
 
-2026-03-18
+2026-03-19
