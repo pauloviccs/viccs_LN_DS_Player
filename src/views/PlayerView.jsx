@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Platform } from '../lib/platform';
 
 // Helper to resolve media URLs
 const getMediaSrc = (item) => {
@@ -18,6 +19,7 @@ export default function PlayerView({ screenId, initialPlaylist }) {
     const itemsRef = useRef([]);
     const currentIndexRef = useRef(0);
     const videoRef = useRef(null);
+    const imgRef = useRef(null); // ← FIX A: ref para <img> persistente
     const timeoutRef = useRef(null);
     const isTransitioningRef = useRef(false);
     const playRetryRef = useRef(null);
@@ -105,6 +107,7 @@ export default function PlayerView({ screenId, initialPlaylist }) {
     const [mediaSrc, setMediaSrc] = useState('');
 
     // ── JIT Blob URL for Videos (Bypass SW for LG WebOS) ──────────────
+    // FIX C: Otimizado com Platform.useJITBlob — só cria JIT Blob para WebOS legado
     useEffect(() => {
         let objectUrl = null;
         let isCancelled = false;
@@ -120,7 +123,15 @@ export default function PlayerView({ screenId, initialPlaylist }) {
                 return;
             }
 
-            // For videos: Try to load from Cache API and create a JIT Blob URL to prevent SW stalling on LG WebOS
+            // FIX C: JIT Blob apenas para plataformas onde o SW causa stall (WebOS legado)
+            if (!Platform.useJITBlob) {
+                // Android TV, Samsung Tizen, Philips: usar URL direto — SW cuida do cache
+                dbg(`Direct URL (non-WebOS): ${originalUrl.split('/').pop()?.substring(0, 30)}`);
+                setMediaSrc(originalUrl);
+                return;
+            }
+
+            // WebOS legado: JIT Blob para contornar limitações do SW
             dbg(`Resolving JIT Blob for ${activeItem.name || 'video'}...`);
             try {
                 const cache = await caches.open('lumia-media-v1');
@@ -134,7 +145,6 @@ export default function PlayerView({ screenId, initialPlaylist }) {
                         setMediaSrc(objectUrl);
                     }
                 } else if (!isCancelled) {
-                    // Fallback if not in cache
                     dbg(`JIT Blob failed - not in cache, fallback to network`);
                     setMediaSrc(originalUrl);
                 }
@@ -247,8 +257,19 @@ export default function PlayerView({ screenId, initialPlaylist }) {
                 // Reset and load
                 video.currentTime = 0;
 
+                // FIX C: Android TV WebView precisa de load() explícito para iniciar download do novo src
+                if (Platform.requiresExplicitLoad) {
+                    video.load();
+                    dbg(`Android TV: video.load() chamado explicitamente`);
+                }
+
+                // FIX B: flag para garantir que tryPlay só é chamado uma vez por item
+                let playInitiated = false;
+
                 // Strategy: try play immediately + listen for canplay as backup
                 const onCanPlay = () => {
+                    if (playInitiated) return; // ← FIX B: guard
+                    playInitiated = true;
                     dbg(`canplay fired for [${itemName}] — calling play()`);
                     video.removeEventListener('canplay', onCanPlay);
                     tryPlay(1);
@@ -259,16 +280,19 @@ export default function PlayerView({ screenId, initialPlaylist }) {
                 // Also try immediately (works on Chrome, some SmartTVs)
                 // Small delay to let React commit the new src
                 setTimeout(() => {
+                    if (playInitiated) return; // ← FIX B: guard
+                    playInitiated = true;
                     dbg(`Immediate play attempt for [${itemName}]`);
                     tryPlay(1);
                 }, 200);
 
-                // Safety net: if nothing happens after 10s, skip
+                // FIX C: Safety net com timeout por plataforma
+                const safetyMs = Platform.safetyTimeoutMs;
                 timeoutRef.current = setTimeout(() => {
-                    dbg(`SAFETY TIMEOUT 10s — video never played [${itemName}]`);
+                    dbg(`SAFETY TIMEOUT ${safetyMs / 1000}s — video never played [${itemName}]`);
                     video.removeEventListener('canplay', onCanPlay);
                     nextItem();
-                }, 10000);
+                }, safetyMs);
             }
         }
 
@@ -351,41 +375,55 @@ export default function PlayerView({ screenId, initialPlaylist }) {
     }
 
     // ── Render: Active playback ───────────────────────────────────────
+    // FIX A: Ambos <video> e <img> SEMPRE presentes no DOM, visibilidade via style.
+    // NUNCA usar key={} em <video> — causa destruição e recriação do pipeline de decode.
     return (
         <div
             className="bg-black w-full h-full relative overflow-hidden"
             onClick={enterFullscreen}
             style={{ width: '100vw', height: '100vh' }}
         >
-            {activeItem?.type === 'video' ? (
-                <video
-                    key={`video-${currentIndex}`}
-                    ref={videoRef}
-                    src={mediaSrc}
-                    className="w-full h-full object-cover"
-                    style={{ backgroundColor: '#000', width: '100%', height: '100%' }}
-                    muted
-                    autoPlay
-                    playsInline
-                    preload="auto"
-                    onEnded={handleVideoEnded}
-                    onError={handleVideoError}
-                    onPlaying={handleVideoPlaying}
-                    onStalled={handleVideoStalled}
-                    onWaiting={handleVideoWaiting}
-                >
-                    Seu navegador não suporta este formato de vídeo.
-                </video>
-            ) : (
-                <img
-                    key={`img-${currentIndex}`}
-                    src={mediaSrc}
-                    className="w-full h-full object-cover"
-                    style={{ backgroundColor: '#000', width: '100%', height: '100%' }}
-                    alt="Content"
-                    onError={handleImageError}
-                />
-            )}
+            {/* Video — sempre presente no DOM, escondido quando não é o tipo ativo */}
+            <video
+                ref={videoRef}
+                src={mediaSrc}
+                className="w-full h-full object-cover"
+                style={{
+                    backgroundColor: '#000',
+                    width: '100%',
+                    height: '100%',
+                    display: activeItem?.type === 'video' ? 'block' : 'none',
+                    // GPU compositing layer — crítico para WebOS 4.x
+                    transform: 'translateZ(0)',
+                    WebkitTransform: 'translateZ(0)',
+                    backfaceVisibility: 'hidden',
+                    WebkitBackfaceVisibility: 'hidden',
+                }}
+                muted
+                autoPlay
+                playsInline
+                preload="auto"
+                onEnded={handleVideoEnded}
+                onError={handleVideoError}
+                onPlaying={handleVideoPlaying}
+                onStalled={handleVideoStalled}
+                onWaiting={handleVideoWaiting}
+            />
+
+            {/* Image — sempre presente no DOM, escondida quando não é o tipo ativo */}
+            <img
+                ref={imgRef}
+                src={activeItem?.type === 'image' ? mediaSrc : undefined}
+                className="w-full h-full object-cover"
+                style={{
+                    backgroundColor: '#000',
+                    width: '100%',
+                    height: '100%',
+                    display: activeItem?.type === 'image' ? 'block' : 'none',
+                }}
+                alt="Content"
+                onError={handleImageError}
+            />
 
             {/* ── Visual Debug Overlay ─────────────────────────────────── */}
             {/* Shows on Smart TVs where DevTools is not available */}

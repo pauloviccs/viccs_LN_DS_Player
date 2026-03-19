@@ -118,3 +118,37 @@ img {
     background-color: rgba(0, 0, 0, 0.85) !important;
   }
 }
+
+/* ── SmartTV Patch: GPU compositing layer para video e img ─────────────── */
+/* FIX E: Previne stuttering de composição no LG WebOS 4.x e flicker no Android TV */
+video,
+img {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* ── SmartTV Patch: Suprimir poster e overlay nativo do Android TV ─────── */
+/* O ícone de play preto / tela branca do Android TV aparece quando video  */
+/* não tem frames renderizados ainda. Forçar black background em todos      */
+/* os pseudo-elements do video previne o flash.                             */
+video::before,
+video::after {
+  display: none !important;
+}
+
+video:not([src]),
+video[src=""],
+video[src="about:blank"] {
+  background-color: #000 !important;
+  opacity: 0;
+}
+
+/* ── SmartTV Patch: Esconder completamente o container quando display:none */
+video[style*="display: none"],
+img[style*="display: none"] {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

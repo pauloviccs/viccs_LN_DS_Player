@@ -56,8 +56,8 @@ export const cacheManager = {
 
                     if (!matchingResponse) {
                         console.log('[CacheManager] MISS — downloading:', item.title || item.name);
-                        // Timeout of 30s per file to prevent infinite hangs on slow networks
-                        await withTimeout(cache.add(request), 30000, item.title || item.url);
+                        // FIX F: Timeout de 60s — suficiente para vídeos grandes em conexão lenta
+                        await withTimeout(cache.add(request), 60000, item.title || item.url);
                         console.log('[CacheManager] Downloaded OK:', item.title || item.name);
                     } else {
                         console.log('[CacheManager] HIT:', item.title || item.name);

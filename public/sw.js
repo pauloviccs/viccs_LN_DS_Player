@@ -58,26 +58,30 @@ self.addEventListener('fetch', (event) => {
           // Check if this is a Range request (crucial for Smart TV video playback)
           if (request.headers.has('range')) {
             const rangeHeader = request.headers.get('range');
-            const buffer = await cachedResponse.arrayBuffer();
+            // FIX D: Blob é mais eficiente em memória que ArrayBuffer — não carrega arquivo inteiro na RAM
+            const blob = await cachedResponse.blob();
+            const totalSize = blob.size;
 
             // Parse range: bytes=start-end
             const bytesStr = rangeHeader.replace(/bytes=/, '').split('-');
             const start = parseInt(bytesStr[0], 10);
-            const end = bytesStr[1] ? parseInt(bytesStr[1], 10) : buffer.byteLength - 1;
+            // Se end não especificado, usa chunk de 512KB para evitar carregar arquivo inteiro
+            const requestedEnd = bytesStr[1] ? parseInt(bytesStr[1], 10) : Math.min(start + 524288, totalSize - 1);
+            const end = Math.min(requestedEnd, totalSize - 1);
             const chunkSize = end - start + 1;
 
-            // Slice the buffer for the requested range
-            const slicedBuffer = buffer.slice(start, end + 1);
+            // Blob.slice() não carrega tudo na RAM — apenas o slice pedido
+            const slicedBlob = blob.slice(start, end + 1, cachedResponse.headers.get('Content-Type') || 'video/mp4');
 
-            console.log(`[SW] Cache HIT (Range ${start}-${end}):`, request.url.split('/').pop());
+            console.log(`[SW] Cache HIT (Range ${start}-${end}/${totalSize}):`, request.url.split('/').pop());
 
             // Create a 206 Partial Content response
-            return new Response(slicedBuffer, {
+            return new Response(slicedBlob, {
               status: 206,
               statusText: 'Partial Content',
               headers: new Headers({
                 'Content-Type': cachedResponse.headers.get('Content-Type') || 'video/mp4',
-                'Content-Range': `bytes ${start}-${end}/${buffer.byteLength}`,
+                'Content-Range': `bytes ${start}-${end}/${totalSize}`,
                 'Content-Length': chunkSize.toString(),
                 'Accept-Ranges': 'bytes',
                 'Cache-Control': 'public, max-age=31536000'
