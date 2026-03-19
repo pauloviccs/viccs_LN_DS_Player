@@ -9,11 +9,10 @@ const getMediaSrc = (item) => {
     return item.src || '';
 };
 
-export default function PlayerView({ screenId, initialPlaylist }) {
+export default function PlayerView({ screenId, initialPlaylist, showDebug = false }) {
     const [playlist, setPlaylist] = useState(initialPlaylist);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [debugInfo, setDebugInfo] = useState('Initializing...');
-    const [showDebug, setShowDebug] = useState(true); // Visual debug overlay
 
     // ── Refs ──────────────────────────────────────────────────────────
     const itemsRef = useRef([]);

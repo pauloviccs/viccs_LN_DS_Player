@@ -14,11 +14,13 @@ export default function App() {
   const [schemaError, setSchemaError] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [globalDebug, setGlobalDebug] = useState(false);
 
   // Keep references for proper cleanup and comparison
   const screenChannelRef = useRef(null);
   const pingIntervalRef = useRef(null);
   const previousScreenRef = useRef(null);
+  const systemChannelRef = useRef(null);
 
   const enterPairingMode = async (reason) => {
     try {
@@ -105,6 +107,12 @@ export default function App() {
         const deviceId = getDeviceId();
         console.log('Device ID:', deviceId);
 
+        // Fetch initial global settings
+        const { data: settingsData } = await supabase.from('app_settings').select('global_debug').eq('id', 1).maybeSingle();
+        if (settingsData) {
+          setGlobalDebug(settingsData.global_debug);
+        }
+
         // 1. Register/Get Screen
         let { data: screen, error } = await supabase
           .from('screens')
@@ -166,6 +174,20 @@ export default function App() {
           )
           .subscribe();
 
+        // 2.5 Subscribe to system settings broadcasts
+        if (systemChannelRef.current) {
+          supabase.removeChannel(systemChannelRef.current);
+        }
+
+        systemChannelRef.current = supabase.channel('system_updates')
+          .on('broadcast', { event: 'DEBUG_TOGGLE' }, (payload) => {
+            console.log('[System Broadcast] DEBUG_TOGGLE:', payload);
+            if (payload.payload && payload.payload.global_debug !== undefined) {
+              setGlobalDebug(payload.payload.global_debug);
+            }
+          })
+          .subscribe();
+
         // 3. Periodic Ping (Heartbeat)
         if (pingIntervalRef.current) {
           clearInterval(pingIntervalRef.current);
@@ -173,7 +195,7 @@ export default function App() {
 
         pingIntervalRef.current = setInterval(async () => {
           // Roda os dois em paralelo: atualiza o relógio da TV E registra o evento histórico
-          const [pingResult, eventResult] = await Promise.all([
+          const [pingResult, eventResult, settingsResult] = await Promise.all([
             supabase
               .from('screens')
               .update({ last_ping: new Date() })
@@ -181,10 +203,16 @@ export default function App() {
             supabase
               .from('screen_events')
               .insert({ screen_id: deviceId, event_type: 'heartbeat' }),
+            supabase
+              .from('app_settings')
+              .select('global_debug')
+              .eq('id', 1)
+              .maybeSingle()
           ]);
 
           if (pingResult.error) console.error('[Heartbeat] Ping failed:', pingResult.error);
           if (eventResult.error) console.error('[Heartbeat] Event log failed:', eventResult.error);
+          if (settingsResult?.data) setGlobalDebug(settingsResult.data.global_debug);
         }, 90000); // 90s ping — grava heartbeat em screen_events para histórico do gráfico
 
       } catch (e) {
@@ -202,6 +230,9 @@ export default function App() {
       }
       if (screenChannelRef.current) {
         supabase.removeChannel(screenChannelRef.current);
+      }
+      if (systemChannelRef.current) {
+        supabase.removeChannel(systemChannelRef.current);
       }
     }
   }, []);
@@ -351,7 +382,7 @@ export default function App() {
       try {
         const { data, error } = await supabase
           .from('screens')
-          .select('id,status,pairing_code,playlist_id,assigned_to,created_at,name,last_ping')
+          .select('id,status,pairing_code,playlist_id,assigned_to,created_at,name,last_ping,show_debug')
           .eq('id', deviceId)
           .maybeSingle();
 
@@ -458,7 +489,7 @@ export default function App() {
 
   return (
     <>
-      <PlayerView screenId={screenData?.id} initialPlaylist={playlist} />
+      <PlayerView screenId={screenData?.id} initialPlaylist={playlist} showDebug={screenData?.show_debug || globalDebug} />
       {isSyncing && (
         <div className="fixed top-4 right-4 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-2 z-50 animate-pulse">
           <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" />
